@@ -1,5 +1,8 @@
 from sanic import Sanic, response
-
+import redis
+import json
+import requests
+from datetime import timedelta
 ##### INITIAL SETUP #####
 
 app = Sanic('school')
@@ -14,7 +17,8 @@ in_memory_student_db = [
     }
 ]
 
-
+redis_client = redis.Redis(host='localhost', port=6379, db=0)
+    
 ##### CRUD METHODS #####
 
 @app.get('/')
@@ -23,6 +27,8 @@ async def get_student(request) :
     if id :
         return response.json(in_memory_student_db[int(id)])
     return response.json(in_memory_student_db)
+
+
 
 @app.post('/')
 async def post_student(request) :
@@ -46,6 +52,28 @@ async def delete_student(request, id) :
     else:
         return response.json({"error": "No Student with given id"})
     return response.json({"message": "Deleted student successfully"})
+
+##### REDIS CACHING OF AN API CALL #####
+@app.get('/redis')
+async def get_redis_cache(request) :
+    
+
+    api_url = 'https://api.coindesk.com/v1/bpi/currentprice.json'
+    response_json =  {}
+
+    api_data = redis_client.get('api_data')
+    redis_client.expire('api_data', timedelta(seconds=5))
+    if api_data :
+        print('Serving From Redis Cache') 
+        response_json = json.loads(api_data)
+        return response.json({'msg' : 'Serving From Redis Cache'})
+    else :
+        print('Serving From Web API') 
+        res = requests.get(api_url)
+        response_json = res.json()
+        redis_client.set('api_data', json.dumps(res.json()))
+        return response.json({'msg' : 'Serving From Web API'})
+    
 
 ##### RUN SERVER #####
 
